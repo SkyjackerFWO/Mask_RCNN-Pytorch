@@ -11,6 +11,8 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
 
 from engine import train_one_epoch, evaluate
+
+import config as config
 import utils
 import transforms as T
 
@@ -145,8 +147,9 @@ def get_transform(train):
 
 
 # use our dataset and defined transformations
-dataset = ReceiptDataset('datasets/train',"instances_default.json",transform = get_transform(train=True))
-dataset_test = ReceiptDataset('datasets/val',"instances_default.json",transform = get_transform(train=True))
+print(config.data_train_path)
+dataset = ReceiptDataset('datasets/train',config.file_json_path,transform = get_transform(train=True))
+dataset_test = ReceiptDataset(config.data_test_path,config.file_json_path,transform = get_transform(train=True))
 
 # split the dataset in train and test set
 torch.manual_seed(1)
@@ -176,33 +179,33 @@ model.to(device)
 
 # construct an optimizer
 params = [p for p in model.parameters() if p.requires_grad]
-optimizer = torch.optim.SGD(params, lr=0.005,
-                            momentum=0.9, weight_decay=0.0005)
+optimizer = torch.optim.SGD(params, lr=config.learning_rate,
+                            momentum=config.momentum, weight_decay=config.weight_decay)
 
 # and a learning rate scheduler which decreases the learning rate by
 # 10x every 3 epochs
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                               step_size=3,
-                                               gamma=0.1)
+                                               step_size=config.step_size,
+                                               gamma=config.gamma)
 # let's train it for 10 epochs
 from torch.optim.lr_scheduler import StepLR
-num_epochs = 10
+num_epochs = config.epoch
 
 for epoch in range(num_epochs):
     # train for one epoch, printing every 10 iterations
     train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq=10)
-    # print('train ok')
-
-    # # update the learning rate
     lr_scheduler.step()
-    # print('lr ok')
-
-    # evaluate on the test dataset
     evaluate(model, data_loader_test, device=device)# pick one image from the test set
-    # print('ev ok')
-
-# img, _ = dataset_test[0]
-# # put the model in evaluation mode
-# model.eval()
-# with torch.no_grad():
-#     prediction = model([img.to(device)])
+    
+    if i%10==0:
+        if not os.path.isdir('./checkpoint'):
+            os.mkdir('./checkpoint')
+        torch.save(model.state_dict(), "./checkpoint/ckpt.pth")
+            
+# Test model 
+img, _ = dataset_test[0]
+# put the model in evaluation mode
+model.load_state_dict(torch.load('./checkpoint/ckpt.pth'))
+model.eval()
+with torch.no_grad():
+    prediction = model([img.to(device)])
